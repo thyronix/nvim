@@ -1,75 +1,66 @@
 return {
-  -- Ensure Tree-sitter asm parser is installed
+  -- Tree-sitter asm parser
   {
     "nvim-treesitter/nvim-treesitter",
     opts = function(_, opts)
-      if type(opts.ensure_installed) == "table" then
-        vim.list_extend(opts.ensure_installed, { "asm" })
-      end
+      opts.ensure_installed = opts.ensure_installed or {}
+      vim.list_extend(opts.ensure_installed, { "asm" })
     end,
   },
 
   -- Assembly language server (asm-lsp)
   {
     "neovim/nvim-lspconfig",
-    opts = function(_, opts)
-      opts.servers = opts.servers or {}
-      opts.servers.asm_lsp = {
-        mason = false,
-        filetypes = { "asm", "nasm", "s", "S" },
-        handlers = {
-          -- Suppress bogus diagnostics from asm-lsp:
-          -- asm-lsp executes a single static external compiler (like nasm) across all files,
-          -- which generates false syntax errors whenever GAS or other assembly syntaxes are used.
-          -- Suppressing publishDiagnostics prevents these false alarms while preserving full
-          -- LSP functionality: hover documentation, completions, signature help, and goto-definition.
-          ["textDocument/publishDiagnostics"] = function(...) end,
+    opts = {
+      servers = {
+        asm_lsp = {
+          -- Install it yourself (`cargo install asm-lsp`, your package manager, or look
+          -- for it in :Mason); mason = false means LazyVim won't try.
+          mason = false,
+          filetypes = { "asm", "vmasm", "nasm" },
+          handlers = {
+            -- asm-lsp runs one fixed assembler over every file, so it reports false
+            -- syntax errors whenever the dialect differs. nvim-lint (below) does the
+            -- dialect-aware diagnostics; hover, completion and goto-definition stay.
+            ["textDocument/publishDiagnostics"] = function() end,
+          },
         },
-      }
-    end,
+      },
+    },
   },
 
-  -- Syntax-aware Assembly Linting via nvim-lint
-  -- Accurately verifies GAS using `as` and NASM using `nasm` without false positives
+  -- Dialect-aware diagnostics: `as` for GAS, `nasm` for NASM, nothing for the rest
   {
     "mfussenegger/nvim-lint",
     opts = function(_, opts)
-      opts.linters_by_ft = opts.linters_by_ft or {}
-      opts.linters = opts.linters or {}
-
       local af = require("config.assembly_flavor")
+      local efm = "%f:%l: %t%*[^:]: %m,%f:%l: %m"
 
+      local function linter(cmd, args)
+        return {
+          name = cmd,
+          cmd = cmd,
+          args = args,
+          stdin = false,
+          append_fname = true,
+          stream = "stderr",
+          ignore_exitcode = true,
+          parser = require("lint.parser").from_errorformat(efm, { source = cmd }),
+        }
+      end
+
+      opts.linters = opts.linters or {}
       opts.linters.assembly_lint = function()
         local flavor = af.detect_flavor(0)
         if flavor == "gas" then
-          return {
-            name = "as",
-            cmd = "as",
-            stdin = false,
-            append_fname = true,
-            args = { "-g", "-o", "/dev/null" },
-            stream = "stderr",
-            ignore_exitcode = true,
-            parser = require("lint.parser").from_errorformat("%f:%l: %t%*[^:]: %m,%f:%l: %m", {
-              source = "as",
-            }),
-          }
+          if vim.fn.expand("%:e") == "S" then -- needs the C preprocessor
+            return linter("gcc", { "-x", "assembler-with-cpp", "-c", "-o", "/dev/null" })
+          end
+          return linter("as", { "-g", "-o", "/dev/null" })
         elseif flavor == "nasm" then
-          return {
-            name = "nasm",
-            cmd = "nasm",
-            stdin = false,
-            append_fname = true,
-            args = { "-f", "elf64", "-X", "gnu", "-o", "/dev/null" },
-            stream = "stderr",
-            ignore_exitcode = true,
-            parser = require("lint.parser").from_errorformat("%f:%l: %t%*[^:]: %m,%f:%l: %m", {
-              source = "nasm",
-            }),
-          }
+          return linter("nasm", { "-f", "elf64", "-X", "gnu", "-o", "/dev/null" })
         end
-
-        -- For FASM, MASM, etc., avoid false alarms
+        -- FASM / MASM: no linter, no false alarms
         return {
           name = "assembly_noop",
           cmd = "true",
@@ -84,19 +75,11 @@ return {
         }
       end
 
-      opts.linters_by_ft.asm = opts.linters_by_ft.asm or {}
-      vim.list_extend(opts.linters_by_ft.asm, { "assembly_lint" })
-
-      opts.linters_by_ft.nasm = opts.linters_by_ft.nasm or {}
-      vim.list_extend(opts.linters_by_ft.nasm, { "assembly_lint" })
-    end,
-  },
-
-  -- Debug adapter protocol (DAP)
-  {
-    "mfussenegger/nvim-dap",
-    opts = function()
-      pcall(require, "config.dap")
+      opts.linters_by_ft = opts.linters_by_ft or {}
+      for _, ft in ipairs({ "asm", "nasm" }) do
+        opts.linters_by_ft[ft] = opts.linters_by_ft[ft] or {}
+        vim.list_extend(opts.linters_by_ft[ft], { "assembly_lint" })
+      end
     end,
   },
 }

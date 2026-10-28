@@ -1,12 +1,13 @@
 return {
   "saghen/blink.cmp",
   opts = {
-    -- Remove snippets for assembly files (keeps LSP, path, and buffer words)
+    -- No snippets in assembly buffers (keeps LSP, path and buffer words).
+    -- Keyed by filetype: there is no filetype "s".
     sources = {
       per_filetype = {
         asm = { "lsp", "path", "buffer" },
         nasm = { "lsp", "path", "buffer" },
-        s = { "lsp", "path", "buffer" },
+        fasm = { "lsp", "path", "buffer" },
       },
     },
     -- Turn off grey ghost text preview
