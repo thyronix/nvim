@@ -73,6 +73,26 @@ local cases = {
     ext = "asm", want = "masm",
     src = ".model flat, stdcall\n.code\nmain PROC\n  ret\nmain ENDP\nEND main\n",
   },
+  {
+    name = "Objdump: AT&T output with header",
+    ext = "s", want = "objdump",
+    src = "a.out:     file format elf64-x86-64\n\nDisassembly of section .text:\n0000000000001000 <_start>:\n    1000:\tf3 0f 1e fa          \tendbr64\n",
+  },
+  {
+    name = "Objdump: Intel disassembly without header",
+    ext = "asm", want = "objdump",
+    src = "0000000000001000 <_start>:\n    1000:\tf3 0f 1e fa          \tendbr64\n    1004:\t48 83 ec 08          \tsub    rsp,0x8\n",
+  },
+  {
+    name = "Objdump: .objdump extension",
+    ext = "objdump", want = "objdump",
+    src = "anything\n",
+  },
+  {
+    name = "Objdump: .dis extension",
+    ext = "dis", want = "objdump",
+    src = "anything\n",
+  },
 }
 
 local failed = 0

@@ -8,6 +8,7 @@ return {
         asm = { "lsp", "path", "buffer" },
         nasm = { "lsp", "path", "buffer" },
         fasm = { "lsp", "path", "buffer" },
+        objdump = { "path", "buffer" },
       },
     },
     -- Turn off grey ghost text preview

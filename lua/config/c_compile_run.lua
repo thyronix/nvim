@@ -9,7 +9,10 @@
 
 local M = {}
 
-local ASM_EXT = { asm = true, nasm = true, s = true, S = true }
+local ASM_EXT = {
+  asm = true, nasm = true, s = true, S = true,
+  objdump = true, dis = true, disasm = true, dump = true, dasm = true,
+}
 local PROJECT_MARKERS = { "CMakeLists.txt", "go.mod", "Cargo.toml", "pyproject.toml", "package.json", "Makefile" }
 
 local function sq(s)

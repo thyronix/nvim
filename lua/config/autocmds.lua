@@ -7,16 +7,30 @@
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 
+-- Filetype detection for disassembly/objdump files
+vim.filetype.add({
+  extension = {
+    objdump = "objdump",
+    dump = "objdump",
+    dis = "objdump",
+    disasm = "objdump",
+    dasm = "objdump",
+  },
+})
+
+-- Treesitter highlighting: use the asm parser for objdump
+pcall(vim.treesitter.language.register, "asm", "objdump")
+
 -- <leader>r (run) / <leader>dd (debug) for every supported language, plus assembly
 -- buffer setup. One autocmd replaces the ten near-identical after/ftplugin/*.lua files.
-local asm_filetypes = { asm = true, nasm = true, fasm = true, masm = true }
+local asm_filetypes = { asm = true, nasm = true, fasm = true, masm = true, objdump = true }
 
 vim.api.nvim_create_autocmd("FileType", {
   group = vim.api.nvim_create_augroup("user_run_debug", { clear = true }),
   pattern = {
     "c", "cpp", "cs", "go", "python", "rust",
     "javascript", "typescript", "typescriptreact",
-    "asm", "nasm", "fasm", "masm",
+    "asm", "nasm", "fasm", "masm", "objdump",
   },
   callback = function(ev)
     require("config.c_compile_run").attach(ev.buf)

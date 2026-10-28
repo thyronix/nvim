@@ -6,7 +6,7 @@
 local M = {}
 
 -- Neovim may pick any of these filetypes for a *.asm file, so handle them all.
-M.FILETYPES = { "asm", "nasm", "fasm", "masm" }
+M.FILETYPES = { "asm", "nasm", "fasm", "masm", "objdump" }
 
 -- Words after "#" that are C-preprocessor directives, not GAS comments.
 local CPP_WORDS = {
@@ -28,15 +28,33 @@ local ATT_REGISTERS = {
 }
 
 ---Classify assembly source text.
----Order matters: NASM's preprocessor (`%define`, `%macro`, `%include`) looks like
----AT&T registers (`%rax`) to a naive matcher, so NASM-only markers are tested
----*before* any GAS heuristic, and every marker is anchored to the start of a line
----so comments and strings can't trigger it.
+---Order matters:
+---1. Disassembly/objdump patterns are caught first so that objdump output
+---   (even when saved with a .s or .asm extension) is never fed into as or nasm.
+---2. NASM-only markers are tested before GAS heuristics so NASM directives
+---   (%define, %include) are not mistaken for AT&T registers.
 ---@param content string first N lines of the buffer
----@param ext string file extension, any case ("asm", "s", "S", ...)
----@return "gas"|"nasm"|"fasm"|"masm"
+---@param ext string file extension, any case ("asm", "s", "S", "objdump", ...)
+---@return "gas"|"nasm"|"fasm"|"masm"|"objdump"
 function M.classify(content, ext)
   ext = (ext or ""):lower()
+  if ext == "objdump" or ext == "dis" or ext == "disasm" or ext == "dump" or ext == "dasm" then
+    return "objdump"
+  end
+
+  local c = "\n" .. content .. "\n"
+  -- Disassembly / objdump markers
+  if
+    c:find("Disassembly of section ")
+    or c:find("\n[^\n]-:%s+file format ")
+    or c:find("\n%s*%x+%s+<[^>]+>:") -- symbol header: 0000000000001000 <_start>:
+    or c:find("\n%s*%x+:%s+[%x][%x ]+\t") -- line: 1000:\tf3 0f 1e fa          \tendbr64
+    or c:find("\n%s*%x+:%s+[%x][%x ]+%s%s%s+") -- line: 401000: 48 31 c0    xor %rax,%rax
+    or c:find("\n%s*0x%x+%s+<[%+0-9a-zA-Z_.]+>:") -- gdb: 0x0000000000001149 <+0>:
+  then
+    return "objdump"
+  end
+
   if ext == "s" then
     return "gas" -- .s and .S are always GNU as
   elseif ext == "nasm" then
@@ -156,7 +174,9 @@ function M.build_cmd(bufnr, run)
   end
 
   local steps
-  if flavor == "gas" then
+  if flavor == "objdump" then
+    return nil, "Disassembly / objdump output cannot be compiled or run"
+  elseif flavor == "gas" then
     local assemble
     if ext == "S" then -- needs the C preprocessor
       assemble = ("gcc -g -c %s -o %s"):format(q(src), q(obj))
@@ -190,7 +210,7 @@ function M.setup_buffer(bufnr)
   vim.bo[bufnr].shiftwidth = 4
   vim.bo[bufnr].tabstop = 4
   vim.bo[bufnr].softtabstop = 4
-  vim.bo[bufnr].commentstring = (flavor == "gas") and "# %s" or "; %s"
+  vim.bo[bufnr].commentstring = (flavor == "gas" or flavor == "objdump") and "# %s" or "; %s"
 
   -- The DAP field is `granularity` (not `steppingGranularity`).
   -- <leader>ds is LazyVim's "Session" key, so <leader>dsi / <leader>dso made it
